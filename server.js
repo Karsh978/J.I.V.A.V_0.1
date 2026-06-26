@@ -332,12 +332,23 @@ app.post('/api/upload-notes', upload.single('pdf'), async (req, res) => {
 });
 
 // Main Chat/Command Processor (FULLY MERGED WITH ACADEMIC NOTES SEARCH)
+// Main Chat/Command Processor (FULLY MERGED WITH ACADEMIC NOTES SEARCH + LOCATION INTELLIGENCE)
 app.post('/api/chat-text', async (req, res) => {
     try {
-        const { prompt } = req.body;
+        const { prompt, location } = req.body;
         if (!prompt) return res.status(400).json({ error: "No command received." });
 
         console.log(`[COMMAND]: ${prompt}`);
+
+        // --- LOCATION INTELLIGENCE LAYER ---
+        let locationContext = "";
+        let searchQuery = prompt;
+
+        if (location) {
+            locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}. Use this to answer any location-aware queries (nearby places, local events, distance estimates, etc.).`;
+            searchQuery = `${prompt} near lat:${location.latitude} lng:${location.longitude}`;
+            console.log(`📍 Location received: ${location.latitude}, ${location.longitude}`);
+        }
 
         // --- SECTION A: Scan Jivan's Private Academic Notes ---
         const academicContext = await Knowledge.find({ 
@@ -358,13 +369,14 @@ app.post('/api/chat-text', async (req, res) => {
         const userVault = await Vault.findOne({ userId: "Jivan" });
         const vaultContext = userVault && userVault.facts.length > 0 ? userVault.facts.join("\n") : "No permanent architectural records stored yet.";
 
-        const searchData = await deepSearch(prompt);
+        // Use location-enriched query for search if location is present
+        const searchData = await deepSearch(searchQuery);
         let deepContent = "";
         if (searchData.topUrl) {
             deepContent = await readWebsiteContent(searchData.topUrl);
         }
 
-        // --- SECTION C: LLM Execution with all Layers of Context ---
+        // --- SECTION C: LLM Execution with all Layers of Context (including Location) ---
         const chat = await groq.chat.completions.create({
             messages: [
                 { role: "system", content: JARVIS_OMNISCIENCE_PROMPT },
@@ -373,6 +385,7 @@ app.post('/api/chat-text', async (req, res) => {
                 { role: "system", content: `GLOBAL SEARCH SNIPPETS:\n${searchData.rawSnippets}` },
                 { role: "system", content: `DEEP PAGE SCRAPE DATA:\n${deepContent}` },
                 { role: "system", content: `USER'S PRIVATE ACADEMIC NOTES CONTEXT:\n${notesContextText}` },
+                ...(locationContext ? [{ role: "system", content: locationContext }] : []),
                 { role: "user", content: prompt }
             ],
             model: "llama-3.3-70b-versatile",
