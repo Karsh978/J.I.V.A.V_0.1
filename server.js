@@ -350,25 +350,53 @@ app.post('/api/chat-text', async (req, res) => {
 
         console.log(`[COMMAND]: ${prompt}`);
 
-        // --- LOCATION INTELLIGENCE LAYER ---
-       // --- LOCATION INTELLIGENCE LAYER ---
+      
+// --- LOCATION INTELLIGENCE LAYER ---
+// --- LOCATION INTELLIGENCE LAYER (OSM FREE ENGINE) ---
 let locationContext = "";
 let searchQuery = prompt;
+let nearbyPlacesContext = "";
+
+const locationKeywords = ['cafe', 'coffee', 'restaurant', 'food', 'hospital',
+    'pharmacy', 'hotel', 'petrol', 'gym', 'market', 'mall', 'shop',
+    'near', 'nearby', 'closest', 'aas paas', 'paas', 'najdik', 'dhaba',
+    'medical', 'bank', 'atm', 'park', 'school', 'college', 'station'];
+
+const isLocationQuery = locationKeywords.some(kw => prompt.toLowerCase().includes(kw));
 
 if (location) {
-    locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}.
-    
-NEAREST PLACE DIRECTIVE:
-- If the query involves finding a place (cafe, hospital, restaurant, shop, college,etc.), you MUST search specifically for places near these coordinates.
-- Calculate approximate distance (in km) for each result using the Haversine formula mentally.
-- RANK results from nearest to farthest.
-- For the TOP/NEAREST result, append this EXACT tag at the end of your response: [MAP: <place name>, <city>]
-- Also append this tag with distance info: [NEAREST: <place name> | <approx distance> km away]
-- Suggest: "Sir, <place name> is the closest at approximately <X> km from your current position. You can plan your visit accordingly."
-- NEVER just list places without distance estimation.`;
+    locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}.`;
+    searchQuery = `${prompt} near ${location.latitude},${location.longitude}`;
+    console.log(`📍 Location received: ${location.latitude}, ${location.longitude}`);
 
-    // More precise search with coordinates
-    searchQuery = `${prompt} near ${location.latitude},${location.longitude} closest location`;
+    // 🗺️ OSM Nearby Search — only if location-based query
+    if (isLocationQuery) {
+        const nearbyResults = await findNearbyPlaces(prompt, location.latitude, location.longitude);
+
+        if (nearbyResults && nearbyResults.length > 0) {
+            const nearest = nearbyResults[0];
+            nearbyPlacesContext = `
+VERIFIED NEARBY PLACES (Real driving distance from Jivan's exact location):
+
+${nearbyResults.map((p, i) =>
+    `${i + 1}. ${p.name}
+     Address: ${p.address}
+     Distance: ${p.distance} (${p.duration} by road)
+     Maps: ${p.mapsLink}`
+).join('\n\n')}
+
+NEAREST: ${nearest.name} at ${nearest.distance} (${nearest.duration} drive).
+MANDATORY INSTRUCTIONS:
+- Use ONLY this data. Ignore all other search results for location.
+- Rank these places in your response from nearest to farthest.
+- Say: "Sir, ${nearest.name} sabse paas hai aapki current location se — sirf ${nearest.distance} dur, lagbhag ${nearest.duration} ka drive."
+- End response with EXACTLY these two tags on new lines:
+[MAP: ${nearest.name}, ${nearest.address}]
+[NEAREST: ${nearest.name} | ${nearest.distance} | ${nearest.duration}]`;
+
+            console.log(`✅ OSM: Nearest found — ${nearest.name} at ${nearest.distance}`);
+        }
+    }
 }
         // --- SECTION A: Scan Jivan's Private Academic Notes ---
         const academicContext = await Knowledge.find({ 
@@ -404,6 +432,7 @@ NEAREST PLACE DIRECTIVE:
                 { role: "system", content: `SHORT-TERM CONVERSATION LOG:\n${historyContext}` },
                 { role: "system", content: `GLOBAL SEARCH SNIPPETS:\n${searchData.rawSnippets}` },
                 { role: "system", content: `DEEP PAGE SCRAPE DATA:\n${deepContent}` },
+                { role: "system", content: `GOOGLE PLACES VERIFIED NEARBY DATA:\n${nearbyPlacesContext}` },
                 { role: "system", content: `USER'S PRIVATE ACADEMIC NOTES CONTEXT:\n${notesContextText}` },
                 ...(locationContext ? [{ role: "system", content: locationContext }] : []),
                 { role: "user", content: prompt }
@@ -430,6 +459,61 @@ NEAREST PLACE DIRECTIVE:
         res.status(500).json({ reply: "Sir, the global data-stream is experiencing synchronization turbulence." });
     }
 });
+// 📍 FREE NEARBY SEARCH — OpenStreetMap + OSRM (No API Key needed)
+const findNearbyPlaces = async (query, latitude, longitude) => {
+    try {
+        console.log(`📍 OSM: Searching "${query}" near ${latitude},${longitude}`);
+
+        // Step 1: Nominatim se nearby places search
+        const searchRes = await axios.get(`https://nominatim.openstreetmap.org/search`, {
+            params: {
+                q: query,
+                lat: latitude,
+                lon: longitude,
+                format: 'json',
+                limit: 5,
+                addressdetails: 1
+            },
+            headers: { 'User-Agent': 'JarvisApp/1.0' }
+        });
+
+        const places = searchRes.data;
+        if (!places.length) return null;
+
+        // Step 2: OSRM se har place ki exact driving distance
+        const ranked = await Promise.all(places.map(async (place) => {
+            try {
+                const routeRes = await axios.get(
+                    `https://router.project-osrm.org/route/v1/driving/${longitude},${latitude};${place.lon},${place.lat}?overview=false`,
+                    { timeout: 3000 }
+                );
+                const route = routeRes.data.routes[0];
+                const distKm = (route.distance / 1000).toFixed(1);
+                const durationMin = Math.ceil(route.duration / 60);
+
+                return {
+                    name: place.display_name.split(',')[0],
+                    address: place.display_name,
+                    distance: `${distKm} km`,
+                    duration: `${durationMin} mins`,
+                    distanceVal: parseFloat(distKm),
+                    mapsLink: `https://www.google.com/maps/search/?api=1&query=${place.lat},${place.lon}`
+                };
+            } catch {
+                return null;
+            }
+        }));
+
+        // Nearest se farthest sort karo
+        return ranked
+            .filter(Boolean)
+            .sort((a, b) => a.distanceVal - b.distanceVal);
+
+    } catch (error) {
+        console.error("❌ OSM Places Error:", error.message);
+        return null;
+    }
+};
 
 // Legacy Trigger Endpoint
 app.get('/api/morning-brief', async (req, res) => {
