@@ -53,6 +53,8 @@ CONVERSATION INTELLIGENCE RULES:
 - Before answering, prioritize context over everything. Check if the user is continuing a topic or asking for a memory recall ("aur?", "fir?", "yaad hai?").
 - Do not connect every topic to DSA, projects, coding, or placements unless explicitly relevant. Be a natural conversation partner, not a report generator.
 - Master Jivan is a busy man. Keep responses concise, impactful, and under 100 words whenever possible.
+-If you suggest a place or tell Jivan where he is, ALWAYS add a [MAP: place_name_or_address] tag at the very end of your response.
+Example: "Sir, there is a petrol pump 200m away. [MAP: Petrol Pump near me]"
 `;
 
 // --- 🧠 CORE INTELLIGENCE MODULES ---
