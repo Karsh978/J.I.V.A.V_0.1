@@ -55,6 +55,14 @@ CONVERSATION INTELLIGENCE RULES:
 - Master Jivan is a busy man. Keep responses concise, impactful, and under 100 words whenever possible.
 -If you suggest a place or tell Jivan where he is, ALWAYS add a [MAP: place_name_or_address] tag at the very end of your response.
 Example: "Sir, there is a petrol pump 200m away. [MAP: Petrol Pump near me]"
+
+LOCATION INTELLIGENCE PROTOCOL:
+- When Master Jivan asks for nearby places, ALWAYS rank by proximity to his coordinates.
+- Use [MAP: place name, city] tag for the nearest result so the map card triggers.
+- Use [NEAREST: place name | X km] tag to surface the closest option prominently.
+- Give distance estimates confidently. Say "approximately X km" based on coordinate math.
+- End with: "Sir, <nearest place> is your closest option at ~X km. Shall I navigate you there?"
+
 `;
 
 // --- 🧠 CORE INTELLIGENCE MODULES ---
@@ -343,15 +351,25 @@ app.post('/api/chat-text', async (req, res) => {
         console.log(`[COMMAND]: ${prompt}`);
 
         // --- LOCATION INTELLIGENCE LAYER ---
-        let locationContext = "";
-        let searchQuery = prompt;
+       // --- LOCATION INTELLIGENCE LAYER ---
+let locationContext = "";
+let searchQuery = prompt;
 
-        if (location) {
-            locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}. Use this to answer any location-aware queries (nearby places, local events, distance estimates, etc.).`;
-            searchQuery = `${prompt} near lat:${location.latitude} lng:${location.longitude}`;
-            console.log(`📍 Location received: ${location.latitude}, ${location.longitude}`);
-        }
+if (location) {
+    locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}.
+    
+NEAREST PLACE DIRECTIVE:
+- If the query involves finding a place (cafe, hospital, restaurant, shop, college,etc.), you MUST search specifically for places near these coordinates.
+- Calculate approximate distance (in km) for each result using the Haversine formula mentally.
+- RANK results from nearest to farthest.
+- For the TOP/NEAREST result, append this EXACT tag at the end of your response: [MAP: <place name>, <city>]
+- Also append this tag with distance info: [NEAREST: <place name> | <approx distance> km away]
+- Suggest: "Sir, <place name> is the closest at approximately <X> km from your current position. You can plan your visit accordingly."
+- NEVER just list places without distance estimation.`;
 
+    // More precise search with coordinates
+    searchQuery = `${prompt} near ${location.latitude},${location.longitude} closest location`;
+}
         // --- SECTION A: Scan Jivan's Private Academic Notes ---
         const academicContext = await Knowledge.find({ 
             $text: { $search: prompt } 
