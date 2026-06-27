@@ -20,7 +20,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // --- MONGOOSE MODELS ---
 const Chat = require('./models/Chat');
-const DailyBrief = require('./models/DailyBrief'); 
+const DailyBrief = require('./models/DailyBrief');
 
 // Knowledge Schema & Model Definition (Needed for note scanning)
 const KnowledgeSchema = new mongoose.Schema({
@@ -73,7 +73,7 @@ const updateVault = async (userText, assistantReply) => {
         console.log(`🧠 Jarvis Core: Reviewing conversation for structural facts...`);
         const extraction = await groq.chat.completions.create({
             messages: [{
-                role: "system", 
+                role: "system",
                 content: `Extract ONLY permanent critical facts about the USER (such as Master Jivan's exam dates, long-term technical goals, tracking metrics, preferences, schedules, or identities) from this chat. 
                 CRITICAL FILTER: Do NOT extract search results, company postings, specific available job details, application counts, or dynamic timeline data ("1 hour ago", "23 applicants"). Only capture structural details about Jivan himself.
                 You must reply strictly in JSON format matching this structure: { "facts": ["Fact 1", "Fact 2"] }. 
@@ -84,7 +84,7 @@ const updateVault = async (userText, assistantReply) => {
             model: "llama-3.1-8b-instant",
             response_format: { type: "json_object" }
         });
-        
+
         const resData = JSON.parse(extraction.choices[0]?.message?.content || "{}");
         if (resData.facts && resData.facts.length > 0) {
             console.log(`💾 Vault Matrix: New facts discovered:`, resData.facts);
@@ -122,15 +122,15 @@ const readWebsiteContent = async (url) => {
 const deepSearch = async (query) => {
     try {
         console.log(`🔍 Jarvis is researching: ${query}`);
-        const res = await axios.post('https://google.serper.dev/search', 
-            { q: query, num: 5 }, 
+        const res = await axios.post('https://google.serper.dev/search',
+            { q: query, num: 5 },
             { headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' } }
         );
 
         let context = "";
         if (res.data.knowledgeGraph) context += `Info: ${res.data.knowledgeGraph.description}. `;
-        const snippets = res.data.organic.map((item, i) => `[Source ${i+1}]: ${item.snippet}`).join(" ");
-        
+        const snippets = res.data.organic.map((item, i) => `[Source ${i + 1}]: ${item.snippet}`).join(" ");
+
         return {
             rawSnippets: context + snippets,
             topUrl: res.data.organic[0]?.link || null
@@ -147,16 +147,16 @@ const jobScout = async () => {
     try {
         console.log("🕵️ Jarvis is scouting for new opportunities...");
         const query = "latest React Node.js internship junior developer jobs in India";
-        
+
         const response = await axios.post('https://google.serper.dev/search', {
             q: query,
-            tbs: "qdr:d", 
+            tbs: "qdr:d",
             num: 10
         }, {
             headers: { 'X-API-KEY': process.env.SERPER_API_KEY }
         });
 
-        return response.data.organic || []; 
+        return response.data.organic || [];
     } catch (error) {
         console.error("Scout Error:", error);
         return [];
@@ -189,7 +189,7 @@ const generateBriefPDF = (data, date) => {
     if (data.jobs && Array.isArray(data.jobs)) {
         doc.fontSize(18).fillColor('#00ffcc').text('2. CAREER OPPORTUNITIES (LAST 24H)');
         data.jobs.forEach((job, i) => {
-            doc.fontSize(12).fillColor('#000').text(`${i+1}. ${job.title} - ${job.company || 'N/A'}`);
+            doc.fontSize(12).fillColor('#000').text(`${i + 1}. ${job.title} - ${job.company || 'N/A'}`);
             doc.fontSize(10).fillColor('blue').text(`Link: ${job.link}`);
             doc.moveDown(0.5);
         });
@@ -326,7 +326,7 @@ app.post('/api/upload-notes', upload.single('pdf'), async (req, res) => {
     try {
         const dataBuffer = fs.readFileSync(req.file.path);
         const data = await pdf(dataBuffer);
-        
+
         const newKnowledge = new Knowledge({
             subject: req.body.subject,
             topic: req.body.topic,
@@ -345,45 +345,45 @@ app.post('/api/upload-notes', upload.single('pdf'), async (req, res) => {
 // Main Chat/Command Processor (FULLY MERGED WITH ACADEMIC NOTES SEARCH + LOCATION INTELLIGENCE)
 app.post('/api/chat-text', async (req, res) => {
     try {
-        const { prompt, location } = req.body;
+        const { prompt, location, chatId } = req.body; // 🆕 chatId add
         if (!prompt) return res.status(400).json({ error: "No command received." });
 
         console.log(`[COMMAND]: ${prompt}`);
 
-      
-// --- LOCATION INTELLIGENCE LAYER ---
-// --- LOCATION INTELLIGENCE LAYER (OSM FREE ENGINE) ---
-let locationContext = "";
-let searchQuery = prompt;
-let nearbyPlacesContext = "";
 
-const locationKeywords = ['cafe', 'coffee', 'restaurant', 'food', 'hospital',
-    'pharmacy', 'hotel', 'petrol', 'gym', 'market', 'mall', 'shop',
-    'near', 'nearby', 'closest', 'aas paas', 'paas', 'najdik', 'dhaba',
-    'medical', 'bank', 'atm', 'park', 'school', 'college', 'station'];
+        // --- LOCATION INTELLIGENCE LAYER ---
+        // --- LOCATION INTELLIGENCE LAYER (OSM FREE ENGINE) ---
+        let locationContext = "";
+        let searchQuery = prompt;
+        let nearbyPlacesContext = "";
 
-const isLocationQuery = locationKeywords.some(kw => prompt.toLowerCase().includes(kw));
+        const locationKeywords = ['cafe', 'coffee', 'restaurant', 'food', 'hospital',
+            'pharmacy', 'hotel', 'petrol', 'gym', 'market', 'mall', 'shop',
+            'near', 'nearby', 'closest', 'aas paas', 'paas', 'najdik', 'dhaba',
+            'medical', 'bank', 'atm', 'park', 'school', 'college', 'station'];
 
-if (location) {
-    locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}.`;
-    searchQuery = `${prompt} near ${location.latitude},${location.longitude}`;
-    console.log(`📍 Location received: ${location.latitude}, ${location.longitude}`);
+        const isLocationQuery = locationKeywords.some(kw => prompt.toLowerCase().includes(kw));
 
-    // 🗺️ OSM Nearby Search — only if location-based query
-    if (isLocationQuery) {
-        const nearbyResults = await findNearbyPlaces(prompt, location.latitude, location.longitude);
+        if (location) {
+            locationContext = `MASTER JIVAN'S CURRENT LOCATION: Latitude ${location.latitude}, Longitude ${location.longitude}.`;
+            searchQuery = `${prompt} near ${location.latitude},${location.longitude}`;
+            console.log(`📍 Location received: ${location.latitude}, ${location.longitude}`);
 
-        if (nearbyResults && nearbyResults.length > 0) {
-            const nearest = nearbyResults[0];
-            nearbyPlacesContext = `
+            // 🗺️ OSM Nearby Search — only if location-based query
+            if (isLocationQuery) {
+                const nearbyResults = await findNearbyPlaces(prompt, location.latitude, location.longitude);
+
+                if (nearbyResults && nearbyResults.length > 0) {
+                    const nearest = nearbyResults[0];
+                    nearbyPlacesContext = `
 VERIFIED NEARBY PLACES (Real driving distance from Jivan's exact location):
 
 ${nearbyResults.map((p, i) =>
-    `${i + 1}. ${p.name}
+                        `${i + 1}. ${p.name}
      Address: ${p.address}
      Distance: ${p.distance} (${p.duration} by road)
      Maps: ${p.mapsLink}`
-).join('\n\n')}
+                    ).join('\n\n')}
 
 NEAREST: ${nearest.name} at ${nearest.distance} (${nearest.duration} drive).
 MANDATORY INSTRUCTIONS:
@@ -394,23 +394,35 @@ MANDATORY INSTRUCTIONS:
 [MAP: ${nearest.name}, ${nearest.address}]
 [NEAREST: ${nearest.name} | ${nearest.distance} | ${nearest.duration}]`;
 
-            console.log(`✅ OSM: Nearest found — ${nearest.name} at ${nearest.distance}`);
+                    console.log(`✅ OSM: Nearest found — ${nearest.name} at ${nearest.distance}`);
+                }
+            }
         }
-    }
-}
         // --- SECTION A: Scan Jivan's Private Academic Notes ---
-        const academicContext = await Knowledge.find({ 
-            $text: { $search: prompt } 
+        const academicContext = await Knowledge.find({
+            $text: { $search: prompt }
         }).limit(2);
-        const notesContextText = academicContext.length > 0 
-            ? academicContext.map(k => k.content).join("\n") 
+        const notesContextText = academicContext.length > 0
+            ? academicContext.map(k => k.content).join("\n")
             : "No specific academic notes found for this query.";
 
         // --- SECTION B: Historical logs & Global Search Context ---
-        let userChat = await Chat.findOne({ userId: "Jivan" });
-        if (!userChat) userChat = new Chat({ userId: "Jivan", history: [] });
 
-        const historyContext = userChat.history.slice(-10).map(m => 
+        let userChat = chatId
+            ? await Chat.findById(chatId)
+            : await Chat.findOne({ userId: "Jivan" }).sort({ updatedAt: -1 });
+
+        if (!userChat) {
+            userChat = new Chat({ userId: "Jivan", title: "New Chat", history: [] });
+            await userChat.save();
+        }
+
+        // 🆕 Pehle message se auto title set karo
+        if (userChat.history.length === 0) {
+            userChat.title = prompt.slice(0, 30) + (prompt.length > 30 ? "..." : "");
+        }
+
+        const historyContext = userChat.history.slice(-10).map(m =>
             `${m.role === 'user' ? 'Jivan' : 'Jarvis'}: ${m.content}`
         ).join("\n");
 
@@ -438,7 +450,7 @@ MANDATORY INSTRUCTIONS:
                 { role: "user", content: prompt }
             ],
             model: "llama-3.3-70b-versatile",
-            temperature: 0.3 
+            temperature: 0.3
         });
 
         const replyText = chat.choices[0]?.message?.content || "";
@@ -447,12 +459,12 @@ MANDATORY INSTRUCTIONS:
         // Save History
         userChat.history.push({ role: "user", content: prompt });
         userChat.history.push({ role: "assistant", content: replyText });
-        if (userChat.history.length > 50) userChat.history.shift(); 
+        if (userChat.history.length > 50) userChat.history.shift();
         await userChat.save();
 
         // Background update for Vault
         updateVault(prompt, replyText);
-        
+
         res.json({ reply: replyText });
     } catch (error) {
         console.error(error);
@@ -515,6 +527,44 @@ const findNearbyPlaces = async (query, latitude, longitude) => {
     }
 };
 
+// 📋 Saari chats ki list
+app.get('/api/chats', async (req, res) => {
+    try {
+        const chats = await Chat.find({ userId: "Jivan" })
+            .select('_id title createdAt history')
+            .sort({ updatedAt: -1 });
+
+        res.json(chats);
+    } catch (error) {
+        res.status(500).json({ error: "Could not fetch chats, Sir." });
+    }
+});
+
+// 🆕 Nayi chat banao
+app.post('/api/chats/new', async (req, res) => {
+    try {
+        const newChat = new Chat({
+            userId: "Jivan",
+            title: "New Chat",
+            history: []
+        });
+        await newChat.save();
+        res.json(newChat);
+    } catch (error) {
+        res.status(500).json({ error: "Could not create new chat, Sir." });
+    }
+});
+
+// 🗑️ Chat delete karo
+app.delete('/api/chats/:id', async (req, res) => {
+    try {
+        await Chat.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: "Could not delete chat, Sir." });
+    }
+});
+
 // Legacy Trigger Endpoint
 app.get('/api/morning-brief', async (req, res) => {
     try {
@@ -531,7 +581,7 @@ mongoose.connect(process.env.MONGO_URI)
     .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
 // 🔥 JARVIS SELF-WAKEUP HEARTBEAT
-const SERVER_URL = "https://jarvis-iadb.onrender.com"; 
+const SERVER_URL = "https://jarvis-iadb.onrender.com";
 
 setInterval(async () => {
     try {
