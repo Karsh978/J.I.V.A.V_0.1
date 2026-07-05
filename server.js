@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const fs = require('fs');
 require('dotenv').config();
 const Groq = require('groq-sdk');
@@ -470,6 +471,46 @@ MANDATORY INSTRUCTIONS:
     } catch (error) {
         console.error(error);
         res.status(500).json({ reply: "Sir, the global data-stream is experiencing synchronization turbulence." });
+    }
+});
+
+app.post('/api/tts', async (req, res) => {
+    try {
+        const { text } = req.body;
+
+        if (!text || !text.trim()) {
+            return res.status(400).json({ error: "No text provided for TTS." });
+        }
+
+        console.log(`🔊 TTS Request: "${text.slice(0, 50)}..."`);
+
+        const tts = new MsEdgeTTS();
+        await tts.setMetadata("hi-IN-SwaraNeural", OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+
+        const { audioStream } = tts.toStream(text);
+
+        res.setHeader('Content-Type', 'audio/mpeg');
+
+        audioStream.on('data', (chunk) => {
+            res.write(chunk);
+        });
+
+        audioStream.on('close', () => {
+            res.end();
+        });
+
+        audioStream.on('error', (err) => {
+            console.error("❌ TTS Stream Error:", err.message);
+            if (!res.headersSent) {
+                res.status(500).json({ error: "TTS streaming failed." });
+            }
+        });
+
+    } catch (error) {
+        console.error("❌ TTS Route Error:", error.message);
+        if (!res.headersSent) {
+            res.status(500).json({ error: "TTS generation failed, Sir." });
+        }
     }
 });
 // 📍 FREE NEARBY SEARCH — OpenStreetMap + OSRM (No API Key needed)
