@@ -15,7 +15,7 @@ const pdf = require('pdf-parse');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 const upload = multer({ dest: 'uploads/' });
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -331,6 +331,63 @@ app.get('/api/daily-brief', async (req, res) => {
         res.status(500).json({ error: "Could not retrieve daily intel, Sir." });
     }
 });
+
+// ==========================================
+// Naya route add karo — kahi bhi baaki app.post(...) routes ke paas
+// ==========================================
+app.post('/api/analyze-image', async (req, res) => {
+    try {
+        const { imageBase64, prompt } = req.body;
+
+        if (!imageBase64) {
+            return res.status(400).json({ error: "No image provided." });
+        }
+
+        const userQuestion = prompt && prompt.trim().length > 0
+            ? prompt
+            : "Ye kya hai? Analysis karke Hindi/Hinglish mein bataiye, ek Jarvis-jaisa professional strategic advisor ke tarah.";
+
+        console.log(`👁️ Vision Request: "${userQuestion}"`);
+
+        const visionResponse = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: `You are JARVIS, Jivan's strategic AI assistant. Look at this image and answer in Hinglish, in Jarvis's voice, concisely (under 80 words): ${userQuestion}` },
+                        {
+                            type: "image_url",
+                            image_url: { url: `data:image/jpeg;base64,${imageBase64}` }
+                        }
+                    ]
+                }
+            ],
+           model: "qwen/qwen3.6-27b",
+temperature: 0.4,
+max_tokens: 600
+});
+
+let replyText = visionResponse.choices[0]?.message?.content || "Sir, main is image ko clearly analyze nahi kar paya.";
+
+// "Thinking" model ka internal reasoning hata do, sirf final answer rakho
+replyText = replyText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
+// Agar kisi wajah se poora reasoning hi reh jaaye (tag close na ho), fallback:
+if (!replyText || replyText.length < 3) {
+    replyText = "Sir, is image ka analysis thoda unclear aaya, dobara try karte hain.";
+}
+        console.log(`[JARVIS VISION]: ${replyText}`);
+
+        res.json({ reply: replyText });
+
+    } catch (error) {
+        console.error("❌ Vision Route Error:", error.message);
+        res.status(500).json({ reply: "Sir, visual analysis subsystem abhi unreachable hai." });
+    }
+});
+
+
+
 
 // Notes Absorption Engine
 app.post('/api/upload-notes', upload.single('pdf'), async (req, res) => {
