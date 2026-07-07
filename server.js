@@ -362,17 +362,15 @@ app.post('/api/analyze-image', async (req, res) => {
                     ]
                 }
             ],
-           model: "qwen/qwen3.6-27b",
+     model: "qwen/qwen3.6-27b",
 temperature: 0.4,
-max_tokens: 600
+max_tokens: 400,
+reasoning_format: "hidden",
+reasoning_effort: "none"
 });
 
 let replyText = visionResponse.choices[0]?.message?.content || "Sir, main is image ko clearly analyze nahi kar paya.";
 
-// "Thinking" model ka internal reasoning hata do, sirf final answer rakho
-replyText = replyText.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-
-// Agar kisi wajah se poora reasoning hi reh jaaye (tag close na ho), fallback:
 if (!replyText || replyText.length < 3) {
     replyText = "Sir, is image ka analysis thoda unclear aaya, dobara try karte hain.";
 }
