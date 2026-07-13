@@ -539,6 +539,10 @@ MANDATORY INSTRUCTIONS:
     }
 });
 
+
+
+
+
 app.post('/api/tts', async (req, res) => {
     try {
         const { text } = req.body;
@@ -578,6 +582,60 @@ app.post('/api/tts', async (req, res) => {
         }
     }
 });
+
+// ==========================================
+// Naya route — jab app khulti hai, Jarvis khud pehle baat kare
+// ==========================================
+app.post('/api/greet', async (req, res) => {
+    try {
+        const hour = new Date().getHours();
+        let timeContext = "din";
+        if (hour < 12) timeContext = "subah";
+        else if (hour < 17) timeContext = "dopahar";
+        else if (hour < 21) timeContext = "shaam";
+        else timeContext = "raat";
+
+        const userVault = await Vault.findOne({ userId: "Jivan" });
+        const vaultContext = userVault && userVault.facts.length > 0
+            ? userVault.facts.slice(-8).join("\n")
+            : "Abhi tak koi specific facts stored nahi hain.";
+
+        const lastChat = await Chat.findOne({ userId: "Jivan" }).sort({ updatedAt: -1 });
+        const lastMessage = lastChat?.history?.length > 0
+            ? lastChat.history[lastChat.history.length - 1].content
+            : null;
+
+        const greeting = await groq.chat.completions.create({
+            messages: [{
+                role: "system",
+                content: `You are JARVIS, Jivan's close friend and strategic AI assistant. He just opened the app — YOU speak first, before he says anything.
+Current time context: ${timeContext}.
+Write ONE short, warm, natural opening line (under 25 words) in Hinglish, like a friend greeting him when he shows up — NOT a generic assistant boot message.
+Use his stored facts below ONLY if something genuinely relevant fits naturally (e.g. an exam coming up, a goal he mentioned) — otherwise just a warm, time-appropriate greeting. Don't force it.
+Do not say "System online" or anything robotic. Be a person, not a boot log.
+
+KNOWN FACTS ABOUT JIVAN:
+${vaultContext}`
+            }, {
+                role: "user",
+                content: "Greet me now."
+            }],
+            model: "llama-3.3-70b-versatile",
+            temperature: 0.8,
+            max_tokens: 60
+        });
+
+        const greetText = greeting.choices[0]?.message?.content?.trim() || "Sir, wapas aa gaye! Kya chal raha hai?";
+
+        res.json({ greeting: greetText });
+
+    } catch (error) {
+        console.error("❌ Greet Route Error:", error.message);
+        res.json({ greeting: "Sir, main yahin hoon. Kya madad kar sakta hoon?" });
+    }
+});
+
+
 // 📍 FREE NEARBY SEARCH — OpenStreetMap + OSRM (No API Key needed)
 const findNearbyPlaces = async (query, latitude, longitude) => {
     try {
